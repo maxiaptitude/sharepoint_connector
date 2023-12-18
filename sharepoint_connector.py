@@ -62,29 +62,19 @@ class Sharepoint_connector_API:
 
     # Function to connect to desired folder (change in config file)
     def connect_to_folder(self, folder_name):
-        self.auth_site = authenticate()
-        self.folder = auth_site.Folder(folder_name)
         return self.folder
 
     # Function to download files to Sharepoint
     def download_file(self, file_name, folder_name):
-        self.folder = connect_to_folder(folder_name)
         return self.folder.get_file(file_name)
 
     # Function to upload files to Sharepoint
     def upload_file(self, File, file_name, folder_name):
-        self.folder = connect_to_folder(folder_name)
         return self.folder.upload_file(File, file_name)
 
     # Function to delete files from Sharepoint
     def delete_file(self, File, file_name, folder_name):
-        self.folder = connect_to_folder(folder_name)
         return self.folder.delete_file(File, file_name)
-# Test function
-
-    def print_filepath(self, data):
-        self.data = data + '00'
-        return self.data
 
     # run function to be created accordingly
     def run(self):
