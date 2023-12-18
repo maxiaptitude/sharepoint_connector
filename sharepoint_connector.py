@@ -9,16 +9,16 @@ from utils.yaml_utils import get_config_variables_from_file
 class Sharepoint_connector_API:
 
     def __init__(self, connector = None, config_file_path=None):
+
         # Get config variables from a specific connector.
         ## At the moment only databricks and YAML files are included as methods.
         # Credentials created in azure portal (get them from Entra ID. Register a new app if needed)
-        self.client_id = ''
-        self.client_secret = '' 
-        self.authority = 'https://login.microsoft.com/{tenant-id}'
-        self.scope = ['https://graph.microsoft.com/.default']
+
+
+
         # Config variables from Databricks   
         if connector.lower() == 'databricks':
-            #self.client_id, self.client_secret, self.authority , self.scope = get_databricks_secrets()
+            self.client_id, self.client_secret, self.authority , self.scope = get_secret_variables()
             print('fetched variables from script')
         # Config variables from YAML    
         elif connector.lower() == 'yaml':
@@ -26,7 +26,10 @@ class Sharepoint_connector_API:
             self.config = load_config(config_file_path)
             self.client_id, self.client_secret, self.authority , self.scope = get_config_variables_from_file()
         else:
-            self.client_id, self.client_secret, self.authority , self.scope = None
+        ## UNCOMMENT BEFORE GIT
+            #self.client_id, self.client_secret, self.authority , self.scope = None
+
+
         
 
 
@@ -88,6 +91,6 @@ class Sharepoint_connector_API:
 
 
 ### Testing running the class above with desire functions 
-sp_connector = Sharepoint_connector_API('databricks', None)
+sp_connector = Sharepoint_connector_API('test_variables', None)
 sharepoint_response = sp_connector.run()
 print(sharepoint_response)
