@@ -12,9 +12,9 @@ class Sharepoint_connector_API:
         # Get config variables from a specific connector.
         ## At the moment only databricks and YAML files are included as methods.
         # Credentials created in azure portal (get them from Entra ID. Register a new app if needed)
-        self.client_id = '28e6a33b-3653-4cad-be88-e77678e47f65'
-        self.client_secret = 'ws~8Q~sFWQpw3BYGSUVL.Twp4MeJk6-YZ1t0zb-W' 
-        self.authority = 'https://login.microsoft.com/02c3ccc0-6680-4316-934b-97d503015046'
+        self.client_id = ''
+        self.client_secret = '' 
+        self.authority = 'https://login.microsoft.com/{tenant-id}'
         self.scope = ['https://graph.microsoft.com/.default']
         # Config variables from Databricks   
         if connector.lower() == 'databricks':
