@@ -1,42 +1,64 @@
-from pyspark.sql import SparkSession
-from shareplum import Site, Office365
-from shareplum.site import Version
+import msal
 import yaml
 import json
+import requests
 import os
-
+from utils.databricks_utils import get_secret_variables
+from utils.yaml_utils import get_config_variables_from_file
 
 class Sharepoint_connector_API:
 
-    def __init__(self, config_file_path, df=None):
+    def __init__(self, connector = None, config_file_path=None):
+        # Get config variables from a specific connector.
+        ## At the moment only databricks and YAML files are included as methods.
+        # Credentials created in azure portal (get them from Entra ID. Register a new app if needed)
+        self.client_id = '28e6a33b-3653-4cad-be88-e77678e47f65'
+        self.client_secret = 'ws~8Q~sFWQpw3BYGSUVL.Twp4MeJk6-YZ1t0zb-W' 
+        self.authority = 'https://login.microsoft.com/02c3ccc0-6680-4316-934b-97d503015046'
+        self.scope = ['https://graph.microsoft.com/.default']
+        # Config variables from Databricks   
+        if connector.lower() == 'databricks':
+            #self.client_id, self.client_secret, self.authority , self.scope = get_databricks_secrets()
+            print('fetched variables from script')
+        # Config variables from YAML    
+        elif connector.lower() == 'yaml':
+            # Get config variables from file or else define as None
+            self.config = load_config(config_file_path)
+            self.client_id, self.client_secret, self.authority , self.scope = get_config_variables_from_file()
+        else:
+            self.client_id, self.client_secret, self.authority , self.scope = None
+        
 
-        self.data = df
-        # Get config variables
-        self.config = self.load_config(config_file_path)
-        self.get_config_variables()
 
-# Functions to support the init function
-    # Load config
-    def load_config(self, config_file_path):
-        with open(config_file_path, 'r') as config_file:
-            config = yaml.safe_load(config_file)
-        return config
+    # Functions to support the init function
 
-    # Extract config variables
-    def get_config_variables(self):
-        self.username = self.config['share_point']['user']
-        self.password = self.config['share_point']['password']
-        self.sharepoint_url = self.config['share_point']['url']
-        self.sharepoint_site = self.config['share_point']['site']
-        self.sharepoint_folder = self.config['share_point']['folder']
-        self.sharepoint_file = self.config['share_point']['file']
+    # Create function to authenticate to sharepoint using authenticate token
+    def get_authenticate_token(self, client_id, client_secret, authority, scope):
+        # Getting access token
+        client = msal.ConfidentialClientApplication(client_id, authority = authority, client_credential = client_secret)
 
-    # Create function to authenticate to sharepoint
-    def authenticate(self):
-        self.auth_cookie = Office365(
-            sharepoint_url, username=username, password=password).GetCookies()
-        self.site = Site(sharepoint_site, version=Version.v365,
-                         authcookie=auth_cookie)
+        # Try to lookup an access token in cache
+        token_cache = client.acquire_token_silent(scope, account = None)
+        # Assign token to access token for login
+        if token_cache:
+            access_token = 'Bearer ' + token_cache['access_token']
+            print('Access token fetched from Cache')
+        else:
+            token = client.acquire_token_for_client(scopes = scope)
+            access_token = 'Bearer ' + token['access_token']
+            print('Access token created using Azure AD')
+
+        return access_token
+
+    def get_graph_response(self, url, access_token):
+
+        # Define Header
+        headers = {
+            'Authorization': access_token
+        } 
+
+        # Return get request using the access token
+        return requests.get(url = url, headers = headers)
 
     # Function to connect to desired folder (change in config file)
     def connect_to_folder(self, folder_name):
@@ -66,13 +88,15 @@ class Sharepoint_connector_API:
 
     # run function to be created accordingly
     def run(self):
-        print(f"Username: {self.username}")
-        print(f"Password: {self.password}")
-        print(f"SharePoint URL: {self.sharepoint_url}")
-        print(f"SharePoint Site: {self.sharepoint_site}")
-        print(f"SharePoint Folder: {self.sharepoint_folder}")
-        print(f"SharePoint File: {self.sharepoint_file}")
-        # sharepoint_file  = download_file(self, sharepoint_file, sharepoint_folder)
-        data = self.print_filepath('data')
-        print(data)
-        return data
+        access_token = self.get_authenticate_token(self.client_id, self.client_secret, self.authority, self.scope)
+        site_url = 'https://xbpmf.sharepoint.com/sites/file_system/'
+        url = f'https://graph.microsoft.com/v1.0/sites?url={site_url}'
+        test = self.get_graph_response(url, access_token)
+        print(json.dumps(test.json(), indent = 2))
+        ###########
+
+
+### Testing running the class above with desire functions 
+sp_connector = Sharepoint_connector_API('databricks', None)
+ss = sp_connector.run()
+print(ss)
