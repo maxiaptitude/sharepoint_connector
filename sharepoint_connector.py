@@ -79,7 +79,8 @@ class Sharepoint_connector_API:
     # run function to be created accordingly
     def run(self):
         access_token = self.get_authenticate_token(self.client_id, self.client_secret, self.authority, self.scope)
-        site_url = 'https://xbpmf.sharepoint.com/sites/file_system/'
+        site = 'file_system'
+        site_url = f'https://xbpmf.sharepoint.com/sites/{site}/'
         url = f'https://graph.microsoft.com/v1.0/sites?url={site_url}'
         test = self.get_graph_response(url, access_token)
         print(json.dumps(test.json(), indent = 2))
@@ -88,5 +89,5 @@ class Sharepoint_connector_API:
 
 ### Testing running the class above with desire functions 
 sp_connector = Sharepoint_connector_API('databricks', None)
-ss = sp_connector.run()
-print(ss)
+sharepoint_response = sp_connector.run()
+print(sharepoint_response)
