@@ -8,7 +8,8 @@ import pandas as pd
 # Import utils libraries from ../utils folder
 from utils.databricks_utils import get_secret_variables
 from utils.yaml_utils import get_config_variables_from_file
-from utils.sharepoint_res_utils import flatten_sites_metadata_to_pandas
+from utils.sharepoint_res_utils import flatten_sites_metadata_to_pandas, upload_file_to_sharepoint
+from utils.general_utils import get_targetVariable_with_sourceVariable_from_df, flatten_json
 # Create class
 class Sharepoint_connector_API:
 
@@ -42,6 +43,8 @@ class Sharepoint_connector_API:
 
 
 
+
+        self.access_token = self.get_authenticate_token(self.client_id, self.client_secret, self.authority, self.scope)
     # Functions to support the init function
 
     # Create function to authenticate to sharepoint using authenticate token
@@ -84,20 +87,9 @@ class Sharepoint_connector_API:
             print(f"Error: {response.status_code} - {response.text}")
             return None
     # Function to connect to desired folder (change in config file)
-    def connect_to_folder(self, folder_name):
-        return self.folder
 
     # Function to download files to Sharepoint
-    def download_file(self, file_name, folder_name):
-        return self.folder.get_file(file_name)
-
-    # Function to upload files to Sharepoint
-    def upload_file(self, File, file_name, folder_name):
-        return self.folder.upload_file(File, file_name)
-
     # Function to delete files from Sharepoint
-    def delete_file(self, File, file_name, folder_name):
-        return self.folder.delete_file(File, file_name)
 
     def get_sharepoint_lists(self, site_id, access_token):
         # Construct the URL to fetch lists
@@ -130,23 +122,47 @@ class Sharepoint_connector_API:
 
         except Exception as e:
             print(f"An error occurred: {e}")
+
+
     # run function to be created accordingly
     def run(self):
-        access_token = self.get_authenticate_token(self.client_id, self.client_secret, self.authority, self.scope)
-        site = 'file_system'
-        site_url = f'https://xbpmf.sharepoint.com/sites/{site}/'
-        url = f'https://graph.microsoft.com/v1.0/sites'
-        test = self.get_graph_response(url, access_token)
-        # Get df with all metadata from sites
-        df = flatten_sites_metadata_to_pandas(test.json())
 
+        # Get sites metadata as response
+        url = f'https://graph.microsoft.com/v1.0/sites'
+        sites_metadata_response = self.get_graph_response(url, self.access_token)
+
+        # Convert it to Pandas Dataframe
+        df = flatten_sites_metadata_to_pandas(sites_metadata_response.json())
         ### TO DELETE AFTER TESTINGS
-        df.to_csv('test.csv')
-        print('file saved')
+#        df.to_csv('test.csv')
+#        print('file saved')
+
+        # Get specific Site ID for accessing that one
+        site_id = get_targetVariable_with_sourceVariable_from_df(df, 'site_name', 'file_system', 'site_id')
+        site_name = get_targetVariable_with_sourceVariable_from_df(df, 'site_name', 'file_system', 'site_name')
+        print(site_name)
+
+        # Use site_id for fetching that site_response
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}"
+        target_siteid_metadata_response = self.get_graph_response(url, self.access_token)
+
+        # Convert response to JSON
+        target_siteid_metadata_json = target_siteid_metadata_response.json()
+        target_siteid_metadata_json_text = json.dumps(target_siteid_metadata_json, indent=2)
+
+        # Save JSON Metadata as file in Local & Sharepoint(tentativo)
+        with open(f'{site_name}_metadata.json', 'w') as json_file:
+            json.dump(target_siteid_metadata_json, json_file, indent=2)
+        
+        # Save file stored in Local
+        upload_file_to_sharepoint(self.access_token, site_id, f'{site_name}_metadata.json',folder_path = '')
+
+        # Convert and save as csv in Local & Sharepoint(tentativo).
+        df = pd.DataFrame([flatten_json(target_siteid_metadata_json, prefix=f'site_{site_name}')])
+        df.to_csv(f'{site_name}_metadata.csv')
+        upload_file_to_sharepoint(self.access_token, site_id, f'{site_name}_metadata.csv' ,folder_path = '')
         ###########
 
-
 ### Testing running the class above with desire functions 
-sp_connector = Sharepoint_connector_API('test_variables', None)
+sp_connector = Sharepoint_connector_API('dummy_connector', None)
 sharepoint_response = sp_connector.run()
-print(sharepoint_response)
