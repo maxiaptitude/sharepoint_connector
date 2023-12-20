@@ -317,9 +317,3 @@ class Sharepoint_connector_API:
         # Get list of all files in this site
 
         return df, specific_file_metadata, metadata_dataframe_with_site_name, files_metadata_dataframe_with_site_name, specific_file_metadata
-
-
-# Testing running the class above with desire functions
-sp_connector = Sharepoint_connector_API('dummy_connector', None)
-df, specific_file_metadata, metadata_dataframe_with_site_name, files_metadata_dataframe_with_site_name, specific_file_metadata = sp_connector.test_run()
-files_metadata_dataframe_with_site_name.show(5)
