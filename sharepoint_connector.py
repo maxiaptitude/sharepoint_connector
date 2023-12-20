@@ -4,176 +4,322 @@ import json
 import requests
 import os
 import pandas as pd
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, ArrayType
+from pyspark.sql.functions import col, explode, coalesce, lit
 
 # Import utils libraries from ../utils folder
 from utils.databricks_utils import get_secret_variables
-from utils.yaml_utils import get_config_variables_from_file
-from utils.sharepoint_res_utils import flatten_sites_metadata_to_pandas, upload_file_to_sharepoint
-from utils.general_utils import get_targetVariable_with_sourceVariable_from_df, flatten_json
+from utils.yaml_utils import *
+from utils.sharepoint_res_utils import *
+from utils.general_utils import *
+
 # Create class
+
 class Sharepoint_connector_API:
 
-    def __init__(self, connector = None, config_file_path=None):
+    def __init__(self, connector=None, config_file_path=None):
 
         # Get config variables from a specific connector.
-        ## At the moment only databricks and YAML files are included as methods.
+        # At the moment only databricks and YAML files are included as methods.
         # Credentials created in azure portal (get them from Entra ID. Register a new app if needed(more details in readme.md))
 
+        # Create Spark session
+        self.spark = SparkSession.builder \
+            .appName("Sharepoint_Connector_App") \
+            .getOrCreate()
 
-
-        # Config variables from Databricks   
+        # Get config variables from Databricks
         if connector.lower() == 'databricks':
-            self.client_id, self.client_secret, self.authority , self.scope = get_secret_variables()
+            self.client_id, self.client_secret, self.authority, self.scope = get_secret_variables()
             print('fetched variables from script')
-        # Config variables from YAML    
+
+        # Get config variables from YAML
         elif connector.lower() == 'yaml':
             # Get config variables from file or else define as None
             self.config = load_config(config_file_path)
-            self.client_id, self.client_secret, self.authority , self.scope = get_config_variables_from_file()
+            self.client_id, self.client_secret, self.authority, self.scope = get_config_variables_from_file()
         else:
-##############################################################################
-########################## START UNCOMMENT BEFORE GIT ########################
-##############################################################################
+            ##############################################################################
+            ########################## START UNCOMMENT BEFORE GIT ########################
+            ##############################################################################
 
-            #self.client_id, self.client_secret, self.authority , self.scope = None
+            # self.client_id, self.client_secret, self.authority , self.scope = None
 
-##############################################################################
-########################## END UNCOMMENT BEFORE GIT ##########################
-##############################################################################
+            ##############################################################################
+            ########################## END UNCOMMENT BEFORE GIT ##########################
+            ##############################################################################
+
+            #####################################################################################################
+            ########################## START REMOVING LINES BELOW BEFORE UPLOAD TO GIT ##########################
+            #####################################################################################################
+
+            self.client_id = '28e6a33b-3653-4cad-be88-e77678e47f65'
+            self.client_secret = 'ws~8Q~sFWQpw3BYGSUVL.Twp4MeJk6-YZ1t0zb-W'
+            self.authority = 'https://login.microsoft.com/02c3ccc0-6680-4316-934b-97d503015046'
+            self.scope = ['https://graph.microsoft.com/.default']
+
+###################################################################################################
+########################## END REMOVING LINES BELOW BEFORE UPLOAD TO GIT ##########################
+###################################################################################################
+        # Get access_token
+        self.access_token = self.get_authenticate_token(
+            self.client_id, self.client_secret, self.authority, self.scope)
 
 
-
-        self.access_token = self.get_authenticate_token(self.client_id, self.client_secret, self.authority, self.scope)
     # Functions to support the init function
-
     # Create function to authenticate to sharepoint using authenticate token
     def get_authenticate_token(self, client_id, client_secret, authority, scope):
         # Getting access token
-        client = msal.ConfidentialClientApplication(client_id, authority = authority, client_credential = client_secret)
+        client = msal.ConfidentialClientApplication(
+            client_id, authority=authority, client_credential=client_secret)
 
         # Try to lookup an access token in cache
-        token_cache = client.acquire_token_silent(scope, account = None)
+        token_cache = client.acquire_token_silent(scope, account=None)
         # Assign token to access token for login
         if token_cache:
             access_token = 'Bearer ' + token_cache['access_token']
             print('Access token fetched from Cache')
         else:
-            token = client.acquire_token_for_client(scopes = scope)
+            token = client.acquire_token_for_client(scopes=scope)
             access_token = 'Bearer ' + token['access_token']
             print('Access token created using Azure AD')
 
         return access_token
 
+    # Get response from MS Graph API
     def get_graph_response(self, url, access_token):
 
         # Define Header
         headers = {
             'Authorization': access_token
-        } 
-
-        # Return get request using the access token
-        return requests.get(url = url, headers = headers)
-
-    # Function to convert the request response as a variable to a pandas dataframe. (this can be changed to spark if needed)
-    def flatten_response_data_from_request(response):
-        
-        # Check if the request was successful (status code 200)
-        if response.status_code == 200:
-            # Convert the JSON response to a DataFrame
-            return flatten_sharepoint_data(response.json())
-        else:
-            # Print an error message and return None
-            print(f"Error: {response.status_code} - {response.text}")
-            return None
-    # Function to connect to desired folder (change in config file)
-
-    # Function to download files to Sharepoint
-
-    # Function to delete files from Sharepoint
-
-    def get_sharepoint_lists(self, site_id, access_token):
-        # Construct the URL to fetch lists
-        lists_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists"
-
-        # Define the headers with the access token
-        headers = {
-            'Authorization': access_token,
-            'Content-Type': 'application/json',
         }
 
-        try:
-            # Make a GET request to fetch lists
-            response = requests.get(lists_url, headers=headers)
-
-            # Check if the request was successful (HTTP status code 200)
-            if response.status_code == 200:
-                # Parse the JSON response
-                lists_data = response.json()
-
-                # Extract and print list names and IDs
-                for sharepoint_list in lists_data['value']:
-                    list_name = sharepoint_list['name']
-                    list_id = sharepoint_list['id']
-                    print(f"List Name: {list_name}, List ID: {list_id}")
-
-            else:
-                # Print the error message if the request was not successful
-                print(f"Error: {response.status_code} - {response.text}")
-
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        # Return get request using the access token
+        return requests.get(url=url, headers=headers)
 
 
-
-    # run function to be created accordingly
-    def run(self):
+    # Get site metadata as pyspark df
+    def get_sites_metadata(self):
 
         # Get sites metadata as response
         url = f'https://graph.microsoft.com/v1.0/sites'
-        sites_metadata_response = self.get_graph_response(url, self.access_token)
+        sites_metadata_response = self.get_graph_response(
+            url, self.access_token)
 
-        # Convert it to Pandas Dataframe
-        df = flatten_sites_metadata_to_pandas(sites_metadata_response.json())
-        # CSV saved in Local
-        df.to_csv(f'sites_general_metadata.csv', index=False)
+        df = self.flatten_sublevel_metadata_to_spark(
+            sites_metadata_response.json(), 'value')
+
+        return df
 
 
-        # Get specific Site ID for accessing that one
-        site_id = get_targetVariable_with_sourceVariable_from_df(df, 'site_name', 'file_system', 'site_id')
-        site_name = get_targetVariable_with_sourceVariable_from_df(df, 'site_name', 'file_system', 'site_name')
-        print(site_name)
+    # Get flattend data in a flattened PySpark DataFrame (use for nested JSONS)
+    def flatten_sublevel_metadata_to_spark(self, json_data, key_to_convert):
+        # Create the schema by inferring data types
+        schema = StructType([StructField(key, StringType(), True)
+                            for key in json_data[key_to_convert][0]])
+
+        # Create df with schema
+
+        spark_df = self.spark.createDataFrame([], schema=schema)
+
+        # Populate the df with data
+        for row in json_data[key_to_convert]:
+            values = []
+            # Get values to populate df in a list
+            for key in schema.fieldNames():
+                value = row.get(key) if isinstance(
+                    row.get(key), dict) else row.get(key)
+                values.append(value)
+            # concat df with values 
+            spark_df = spark_df.union(
+                self.spark.createDataFrame([tuple(values)], schema=schema))
+        return spark_df
+
+
+    # Get specific site metadata df with site Name
+    def flatten_json_response_metadata_to_spark(self, json_response):
+        try:
+            # Read JSON string as a df
+            df = self.spark.read.json(
+                self.spark.sparkContext.parallelize([json_response]))
+            return df
+
+        except Exception as e:
+            print(e)
+            return None
+
+
+    # Get metadata df using site name
+    def get_metadata_dataframe_with_site_name(self, df, site_name):
+        # Get sites metadata as response
+        url = f'https://graph.microsoft.com/v1.0/sites'
+        sites_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        df = self.get_sites_metadata()
+        site_id = get_target_variable_with_source_variable_from_pyspark_df(
+            self.spark, df, 'name', site_name, 'id')
+        # Use site_id for fetching that site_response
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}"
+        sites_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        df = self.flatten_json_response_metadata_to_spark(
+            sites_metadata_response.json())
+        return df
+
+    # Get all files metadata df with general info
+    def get_all_files_metadata_with_site_name(self, df, site_name):
+        # Get sites metadata as response
+        url = f'https://graph.microsoft.com/v1.0/sites'
+        sites_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        df = self.get_sites_metadata()
+        site_id = get_target_variable_with_source_variable_from_pyspark_df(
+            self.spark, df, 'name', site_name, 'id')
 
         # Use site_id for fetching that site_response
         url = f"https://graph.microsoft.com/v1.0/sites/{site_id}"
-        target_siteid_metadata_response = self.get_graph_response(url, self.access_token)
+        site_name_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        # Get df
+        df = self.flatten_json_response_metadata_to_spark(
+            site_name_metadata_response.json())
 
-        # Convert response to JSON
-        target_siteid_metadata_json = target_siteid_metadata_response.json()
-        target_siteid_metadata_json_text = json.dumps(target_siteid_metadata_json, indent=2)
+        # Get new id
+        site_id = get_target_variable_with_source_variable_from_pyspark_df(
+            self.spark, df, 'name', site_name, 'id')
 
-        # Save  Metadata as JSON & CSV files in Local & Sharepoint(tentativo)
-        # JSON saved in Local
-        with open(f'{site_name}_metadata.json', 'w') as json_file:
-            json.dump(target_siteid_metadata_json, json_file, indent=2)
+        # Use new id to get new df
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/children"
+        site_files_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        df = self.flatten_sublevel_metadata_to_spark(
+            site_files_metadata_response.json(), 'value')
+
+        return df
+
+
+    # Get specific file metadata with site_name
+    def get_specific_file_metadata_with_site_name(self, df, site_name, file_name):
+        # Get sites metadata as response
+        url = f'https://graph.microsoft.com/v1.0/sites'
+        sites_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        df = self.get_sites_metadata()
+        site_id = get_target_variable_with_source_variable_from_pyspark_df(
+            self.spark, df, 'name', site_name, 'id')
+
+        # Use site_id for fetching that site_response
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}"
+        site_name_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        # Get df
+        df = self.flatten_json_response_metadata_to_spark(
+            site_name_metadata_response.json())
+
+        # Get new site id
+        site_id = get_target_variable_with_source_variable_from_pyspark_df(
+            self.spark, df, 'name', site_name, 'id')
+
+        # Use new id to get new df
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/children"
+        site_files_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        df = self.flatten_sublevel_metadata_to_spark(
+            site_files_metadata_response.json(), 'value')
+        # Get file id
+        # file_ids = get_target_variable_with_source_variable_from_pyspark_df(self.spark, df, 'name', file_name, 'id')
+        file_ids_dict = {row['name']: row['id'] for row in df.collect()}
+        file_id = file_ids_dict.get('folder')
+        # Get file metadata as response
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/items/{file_id}"
+        file_metadata_response = self.get_graph_response(
+            url, self.access_token)
+
+        # Convert to df
+        df = self.flatten_json_response_metadata_to_spark(
+            file_metadata_response.json())
+
+        return df
+
+#    Get all specific files metadata in one dataframe (Not working)
+    def get_all_specific_file_metadata_with_site_name(self, df, site_name):
+        # Get sites metadata as response
+        url = f'https://graph.microsoft.com/v1.0/sites'
+        sites_metadata_response = self.get_graph_response(
+            url, self.access_token)
+
+        df = self.get_sites_metadata()
         
-        # JSON saved in Sharepoint
-        upload_file_to_sharepoint(self.access_token, site_id, f'{site_name}_metadata.json',folder_path = '')
+        site_id = get_target_variable_with_source_variable_from_pyspark_df(
+            self.spark, df, 'name', site_name, 'id')
 
-        # Convert to CSV.
-        df = pd.DataFrame([flatten_json(target_siteid_metadata_json, prefix=f'{site_name}_site_')])
+        # Use site_id for fetching that site_response
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}"
+        site_name_metadata_response = self.get_graph_response(
+            url, self.access_token)
+        # Get df
+        df = self.flatten_json_response_metadata_to_spark(
+            site_name_metadata_response.json())
 
-        # CSV saved in Local
-        df.to_csv(f'{site_name}_metadata.csv', index=False)
+        # Get new site id
+        site_id = get_target_variable_with_source_variable_from_pyspark_df(
+            self.spark, df, 'name', site_name, 'id')
 
-        # CSV saved in sharepoint
-        upload_file_to_sharepoint(self.access_token, site_id, f'{site_name}_metadata.csv' ,folder_path = '')
-        ###########
+        # Use new id to get new df
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/children"
+        site_files_metadata_response = self.get_graph_response(
+            url, self.access_token)
+
+        df = self.flatten_sublevel_metadata_to_spark(
+            site_files_metadata_response.json(), 'value')
+
+        # Get file id
+        # file_ids = get_target_variable_with_source_variable_from_pyspark_df(self.spark, df, 'name', file_name, 'id')
+        file_ids_dict = {row['name']: row['id'] for row in df.collect()}
+        file_id = file_ids_dict.get('folder')
+
+        # Get file metadata as response
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/items/{file_id}"
+        file_metadata_response = self.get_graph_response(
+            url, self.access_token)
+
+        # Convert to df
+        df = self.flatten_json_response_metadata_to_spark(
+            file_metadata_response.json())
+        return all_files_metadata_df
+
+    # Test function
+    def test_run(self):
+
+        # Get sites metadata as response
+        url = f'https://graph.microsoft.com/v1.0/sites'
+        sites_metadata_response = self.get_graph_response(
+            url, self.access_token)
+
+        # get sites metadata df
+        df = self.get_sites_metadata()
+
+        # get site metadata df with site name
+        metadata_dataframe_with_site_name = self.get_metadata_dataframe_with_site_name(
+            df, 'file_system')
+
+        # get site metadata df with site name
+        files_metadata_dataframe_with_site_name = self.get_all_files_metadata_with_site_name(
+            df, 'file_system')
+
+        # Get specific file metadata df
+        specific_file_metadata = self.get_specific_file_metadata_with_site_name(
+            df, 'file_system', 'file_system_files_metadata.csv')
+
+        # Get all specific file metadata df
+        # all_specific_file_metadata = self.get_all_specific_file_metadata_with_site_name(df, 'file_system')
+        # Get list of all files in this site
+
+        return df, specific_file_metadata, metadata_dataframe_with_site_name, files_metadata_dataframe_with_site_name, specific_file_metadata
 
 
-        # CSV with general data saved in sharepoint
-        upload_file_to_sharepoint(self.access_token, site_id, f'sites_general_metadata.csv' ,folder_path = '')
-
-
-### Testing running the class above with desire functions 
+# Testing running the class above with desire functions
 sp_connector = Sharepoint_connector_API('dummy_connector', None)
-sharepoint_response = sp_connector.run()
+df, specific_file_metadata, metadata_dataframe_with_site_name, files_metadata_dataframe_with_site_name, specific_file_metadata = sp_connector.test_run()
+files_metadata_dataframe_with_site_name.show(5)

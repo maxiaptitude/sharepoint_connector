@@ -16,7 +16,7 @@ def flatten_json(json_input, prefix=''):
     return flattened_json_dictionary
 
 # Get Variables within the same row
-def get_targetVariable_with_sourceVariable_from_df(df, source_column, source_value, target_column_to_fetch_value):
+def get_targetVariable_with_sourceVariable_from_pandas_df(df, source_column, source_value, target_column_to_fetch_value):
     # This function extract the specific value from a column given the input of a different column and it's reference value
     #  Example sites dataframe include multiple data in its metadata, but only the id is necessary in this case,
     #  therefore to get the site's ID we look for the id using the site name of interest 
@@ -27,3 +27,15 @@ def get_targetVariable_with_sourceVariable_from_df(df, source_column, source_val
     except Exception as e:
         print(f'Value not founded, please check the input variables. Check the traceback below:{e}')
         return None
+
+
+def get_target_variable_with_source_variable_from_pyspark_df(spark, df, source_column, source_value, target_column_to_fetch_value):
+    # Same as above but for pyspark
+    try:
+        result = df.filter(col(source_column) == source_value).select(target_column_to_fetch_value).first()[0]
+        return result
+    except Exception as e:
+        print(f'Value not found, please check the input variables. Check the traceback below:{e}')
+        return None   
+
+
