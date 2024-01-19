@@ -54,9 +54,9 @@ class Sharepoint_connector_API:
             ########################## START REMOVING LINES BELOW BEFORE UPLOAD TO GIT ##########################
             #####################################################################################################
 
-            self.client_id = '28e6a33b-3653-4cad-be88-e77678e47f65'
-            self.client_secret = 'ws~8Q~sFWQpw3BYGSUVL.Twp4MeJk6-YZ1t0zb-W'
-            self.authority = 'https://login.microsoft.com/02c3ccc0-6680-4316-934b-97d503015046'
+            self.client_id = '28e6a33b-3653'
+            self.client_secret = 'ws~8Q~'
+            self.authority = 'https://login.microsoft.com/02c3ccc0-6680'
             self.scope = ['https://graph.microsoft.com/.default']
 
 ###################################################################################################
